@@ -224,6 +224,9 @@ pub struct Args {
     /// Whether to include the Active Template Library (ATL) in the installation
     #[arg(long)]
     include_atl: bool,
+    /// Whether to include the Microsoft Foundation Classes (MFC) in the installation
+    #[arg(long)]
+    include_mfc: bool,
     /// Whether to include VCR debug libraries
     #[arg(long)]
     include_debug_runtime: bool,
@@ -324,6 +327,7 @@ fn main() -> Result<(), Error> {
         arches,
         variants,
         args.include_atl,
+        args.include_mfc,
         args.include_debug_runtime,
         args.sdk_version,
         args.crt_version,
@@ -388,6 +392,7 @@ fn main() -> Result<(), Error> {
             let prefix = match pay.kind {
                 PayloadKind::CrtHeaders => "CRT.headers".to_owned(),
                 PayloadKind::AtlHeaders => "ATL.headers".to_owned(),
+                PayloadKind::MfcHeaders => "MFC.headers".to_owned(),
                 PayloadKind::CrtLibs => {
                     format!(
                         "CRT.libs.{}.{}",
@@ -398,6 +403,12 @@ fn main() -> Result<(), Error> {
                 PayloadKind::AtlLibs => {
                     format!(
                         "ATL.libs.{}",
+                        pay.target_arch.map_or("all", |ta| ta.as_str()),
+                    )
+                }
+                PayloadKind::MfcLibs => {
+                    format!(
+                        "MFC.libs.{}",
                         pay.target_arch.map_or("all", |ta| ta.as_str()),
                     )
                 }

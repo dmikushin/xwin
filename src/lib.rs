@@ -178,6 +178,8 @@ pub struct Payload {
 pub enum PayloadKind {
     AtlHeaders,
     AtlLibs,
+    MfcHeaders,
+    MfcLibs,
     CrtHeaders,
     CrtLibs,
     SdkHeaders,
@@ -200,6 +202,7 @@ pub fn prune_pkg_list(
     arches: u32,
     variants: u32,
     include_atl: bool,
+    include_mfc: bool,
     include_debug_runtime: bool,
     sdk_version: Option<String>,
     crt_version: Option<String>,
@@ -215,6 +218,7 @@ pub fn prune_pkg_list(
         variants,
         &mut payloads,
         include_atl,
+        include_mfc,
         crt_version,
     )?;
     let sdk_version = get_sdk(pkgs, arches, sdk_version, &mut payloads)?;
@@ -315,6 +319,7 @@ fn get_crt(
     variants: u32,
     pruned: &mut Vec<Payload>,
     include_atl: bool,
+    include_mfc: bool,
     crt_version: Option<String>,
 ) -> Result<String, Error> {
     fn to_payload(mi: &manifest::ManifestItem, payload: &manifest::Payload) -> Payload {
@@ -462,6 +467,10 @@ fn get_crt(
         if include_atl {
             get_atl(pkgs, arches, spectre, pruned, &crt_version)?;
         }
+
+        if include_mfc {
+            get_mfc(pkgs, arches, spectre, pruned, &crt_version)?;
+        }
     }
 
     Ok(crt_version)
@@ -556,6 +565,104 @@ fn get_atl(
                     }
                     None => {
                         tracing::warn!("Unable to locate '{}'", crt_lib_id);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn get_mfc(
+    pkgs: &BTreeMap<String, manifest::ManifestItem>,
+    arches: u32,
+    spectre: bool,
+    pruned: &mut Vec<Payload>,
+    crt_version: &str,
+) -> Result<(), Error> {
+    fn to_payload(mi: &manifest::ManifestItem, payload: &manifest::Payload) -> Payload {
+        // These are really the only two we care about
+        let kind = if mi.id.contains("Headers") {
+            PayloadKind::MfcHeaders
+        } else {
+            PayloadKind::MfcLibs
+        };
+
+        let filename = payload.file_name.to_lowercase();
+
+        // The "chip" in the manifest means "host architecture" but we never need
+        // to care about that since we only care about host agnostic artifacts, but
+        // we do need to check the name of the payload in case it targets a specific
+        // architecture only (eg libs)
+        let target_arch = [
+            ("x64", Arch::X86_64),
+            // Put this one first otherwise "arm" will match it
+            ("arm64", Arch::Aarch64),
+            ("arm", Arch::Aarch),
+            // Put this last as many names also include the host architecture :p
+            ("x86", Arch::X86),
+        ]
+        .iter()
+        .find_map(|(s, arch)| filename.contains(s).then_some(*arch));
+
+        Payload {
+            filename: if let Some(Arch::Aarch64) = target_arch {
+                payload.file_name.replace("ARM", "arm").into()
+            } else {
+                payload.file_name.clone().into()
+            },
+            sha256: payload.sha256.clone(),
+            url: payload.url.clone(),
+            size: payload.size,
+            kind,
+            target_arch,
+            variant: None,
+            install_size: (mi.payloads.len() == 1)
+                .then_some(mi)
+                .and_then(|mi| mi.install_sizes.as_ref().and_then(|is| is.target_drive)),
+        }
+    }
+
+    // The MFC headers are in the "base" package
+    // `Microsoft.VC.<ridiculous_version_numbers>.MFC.Headers.base`
+    {
+        let header_key = format!("Microsoft.VC.{crt_version}.MFC.Headers.base");
+
+        let mfc_headers = pkgs
+            .get(&header_key)
+            .with_context(|| format!("unable to find MFC headers item '{header_key}'"))?;
+
+        pruned.push(to_payload(mfc_headers, &mfc_headers.payloads[0]));
+    }
+
+    {
+        use std::fmt::Write;
+
+        let mut mfc_lib_id = String::new();
+        for variant_spectre in [false, true] {
+            if variant_spectre && !spectre {
+                continue;
+            }
+
+            for arch in Arch::iter(arches) {
+                mfc_lib_id.clear();
+
+                write!(
+                    &mut mfc_lib_id,
+                    "Microsoft.VC.{}.MFC.{}{}.base",
+                    crt_version,
+                    arch.as_ms_str().to_uppercase(), // MFC is uppercased like ATL
+                    if variant_spectre { ".spectre" } else { "" }
+                )
+                .unwrap();
+
+                match pkgs.get(&mfc_lib_id) {
+                    Some(mfc_libs) => {
+                        pruned.push(to_payload(mfc_libs, &mfc_libs.payloads[0]));
+                    }
+                    None => {
+                        tracing::warn!("Unable to locate '{}'", mfc_lib_id);
                     }
                 }
             }

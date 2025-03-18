@@ -32,6 +32,7 @@ fn verify_compiles() {
         xwin::Variant::Desktop as u32,
         false,
         false,
+        false,
         None,
         None,
     )
@@ -196,6 +197,7 @@ fn verify_compiles_minimized() {
         &pkg_manifest,
         xwin::Arch::X86_64 as u32,
         xwin::Variant::Desktop as u32,
+        false,
         false,
         false,
         None,

@@ -26,6 +26,7 @@ fn verify_deterministic() {
         xwin::Variant::Desktop as u32,
         true,
         true,
+        true,
         None,
         None,
     )

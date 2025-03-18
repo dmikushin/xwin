@@ -169,7 +169,7 @@ pub(crate) fn splat(
     let kind = item.payload.kind;
 
     let mappings = match kind {
-        PayloadKind::CrtHeaders | PayloadKind::AtlHeaders => {
+        PayloadKind::CrtHeaders | PayloadKind::AtlHeaders | PayloadKind::MfcHeaders => {
             src.push("include");
             let tree = get_tree(&src)?;
 
@@ -211,7 +211,35 @@ pub(crate) fn splat(
                 section: SectionKind::CrtLib,
             }]
         }
-
+        PayloadKind::MfcLibs => {
+            src.push("lib");
+            let mut target = roots.crt.join("lib");
+ 
+            let spectre = (variants & Variant::Spectre as u32) != 0;
+            if spectre {
+                src.push("spectre");
+                target.push("spectre");
+            }
+ 
+            push_arch(
+                &mut src,
+                &mut target,
+                item.payload
+                    .target_arch
+                    .context("MFC libs didn't specify an architecture")?,
+            );
+ 
+            let tree = get_tree(&src)?;
+ 
+            vec![Mapping {
+                src,
+                target,
+                tree,
+                kind,
+                variant,
+                section: SectionKind::CrtLib,
+            }]
+        }
         PayloadKind::CrtLibs => {
             src.push("lib");
             let mut target = roots.crt.join("lib");
@@ -629,8 +657,10 @@ pub(crate) fn splat(
                                 // have been unpacked before fixing them
                                 PayloadKind::CrtHeaders
                                 | PayloadKind::AtlHeaders
+                                | PayloadKind::MfcHeaders
                                 | PayloadKind::Ucrt
                                 | PayloadKind::AtlLibs
+                                | PayloadKind::MfcLibs
                                 | PayloadKind::VcrDebug => {}
 
                                 PayloadKind::SdkHeaders => {
