@@ -615,7 +615,8 @@ pub(crate) fn splat(
                         let fname_str = fname.as_str();
                         if !include_debug_libs
                             && (mapping.kind == PayloadKind::CrtLibs
-                                || mapping.kind == PayloadKind::Ucrt)
+                                || mapping.kind == PayloadKind::Ucrt
+                                || mapping.kind == PayloadKind::MfcLibs)
                         {
                             if let Some(stripped) = fname_str.strip_suffix(".lib") {
                                 if stripped.ends_with('d')

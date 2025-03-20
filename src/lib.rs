@@ -640,6 +640,8 @@ fn get_mfc(
         use std::fmt::Write;
 
         let mut mfc_lib_id = String::new();
+        
+        // Regular MFC libraries
         for variant_spectre in [false, true] {
             if variant_spectre && !spectre {
                 continue;
@@ -663,6 +665,54 @@ fn get_mfc(
                     }
                     None => {
                         tracing::warn!("Unable to locate '{}'", mfc_lib_id);
+                    }
+                }
+            }
+        }
+        
+        // Add MFC Debug libraries - similar to ATL and regular MFC pattern
+        for variant_spectre in [false, true] {
+            if variant_spectre && !spectre {
+                continue;
+            }
+
+            for arch in Arch::iter(arches) {
+                mfc_lib_id.clear();
+
+                // For debug libraries, look for the Debug variant in the package name
+                write!(
+                    &mut mfc_lib_id,
+                    "Microsoft.VC.{}.MFC.{}{}.Debug.base",
+                    crt_version,
+                    arch.as_ms_str().to_uppercase(),
+                    if variant_spectre { ".spectre" } else { "" }
+                )
+                .unwrap();
+
+                match pkgs.get(&mfc_lib_id) {
+                    Some(mfc_debug_libs) => {
+                        pruned.push(to_payload(mfc_debug_libs, &mfc_debug_libs.payloads[0]));
+                    }
+                    None => {
+                        // Try alternative naming pattern if the first pattern fails
+                        mfc_lib_id.clear();
+                        write!(
+                            &mut mfc_lib_id,
+                            "Microsoft.VC.{}.MFC.Debug.{}{}.base",
+                            crt_version,
+                            arch.as_ms_str().to_uppercase(),
+                            if variant_spectre { ".spectre" } else { "" }
+                        )
+                        .unwrap();
+                        
+                        match pkgs.get(&mfc_lib_id) {
+                            Some(mfc_debug_libs) => {
+                                pruned.push(to_payload(mfc_debug_libs, &mfc_debug_libs.payloads[0]));
+                            }
+                            None => {
+                                tracing::warn!("Unable to locate MFC debug libs '{}'", mfc_lib_id);
+                            }
+                        }
                     }
                 }
             }
